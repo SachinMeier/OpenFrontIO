@@ -1,3 +1,4 @@
+import { UnitType } from "@openfront/engine-api/game/GameTypes";
 import { zInt, zRef } from "@openfront/engine-lib/snapshot/SnapshotType";
 import { z } from "zod";
 import { Execution, Game, Unit } from "../game/Game";
@@ -46,6 +47,42 @@ export class DefensePostExecution implements Execution {
     }
   }
 
+  // Nearest enemy ship in range, transports first. Recomputed every tick: the
+  // post can change hands, which changes who counts as an enemy.
+  private findTarget(): Unit | null {
+    const owner = this.post.owner();
+    const ships = this.mg.nearbyUnits(
+      this.post.tile(),
+      this.mg.config().defensePostTargettingRange(),
+      [UnitType.TransportShip, UnitType.Warship],
+    );
+    let best: Unit | null = null;
+    let bestIsTransport = false;
+    let bestDistSquared = 0;
+    for (const { unit, distSquared } of ships) {
+      if (
+        unit.owner() === owner ||
+        !owner.canAttackPlayer(unit.owner(), true) ||
+        this.alreadySentShell.has(unit) ||
+        (unit.type() === UnitType.Warship &&
+          unit.warshipState().state === "docked")
+      ) {
+        continue;
+      }
+      const isTransport = unit.type() === UnitType.TransportShip;
+      if (
+        best === null ||
+        (isTransport && !bestIsTransport) ||
+        (isTransport === bestIsTransport && distSquared < bestDistSquared)
+      ) {
+        best = unit;
+        bestIsTransport = isTransport;
+        bestDistSquared = distSquared;
+      }
+    }
+    return best;
+  }
+
   tick(ticks: number): void {
     if (!this.post.isActive()) {
       this.active = false;
@@ -57,53 +94,12 @@ export class DefensePostExecution implements Execution {
       return;
     }
 
-    if (this.target !== null && !this.target.isActive()) {
-      this.target = null;
+    for (const unit of this.alreadySentShell) {
+      if (!unit.isActive()) this.alreadySentShell.delete(unit);
     }
 
-    // TODO: Reconsider how/if defense posts target ships.
-    // const ships = this.mg
-    //   .nearbyUnits(
-    //     this.post.tile(),
-    //     this.mg.config().defensePostTargettingRange(),
-    //     [UnitType.TransportShip, UnitType.Warship],
-    //   )
-    //   .filter(
-    //     ({ unit }) =>
-    //       this.post !== null &&
-    //       unit.owner() !== this.post.owner() &&
-    //       !unit.owner().isFriendly(this.post.owner()) &&
-    //       !this.alreadySentShell.has(unit),
-    //   );
-    //
-    // this.target =
-    //   ships.sort((a, b) => {
-    //     const { unit: unitA, distSquared: distA } = a;
-    //     const { unit: unitB, distSquared: distB } = b;
-    //
-    //     // Prioritize TransportShip
-    //     if (
-    //       unitA.type() === UnitType.TransportShip &&
-    //       unitB.type() !== UnitType.TransportShip
-    //     )
-    //       return -1;
-    //     if (
-    //       unitA.type() !== UnitType.TransportShip &&
-    //       unitB.type() === UnitType.TransportShip
-    //     )
-    //       return 1;
-    //
-    //     // If both are the same type, sort by distance (lower `distSquared` means closer)
-    //     return distA - distB;
-    //   })[0]?.unit ?? null;
-    //
-    // if (this.target === null || !this.target.isActive()) {
-    //   this.target = null;
-    //   return;
-    // } else {
-    //   this.shoot();
-    //   return;
-    // }
+    this.target = this.findTarget();
+    this.shoot();
   }
 
   isActive(): boolean {

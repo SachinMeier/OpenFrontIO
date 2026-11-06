@@ -194,7 +194,7 @@
     "desc": {
       "atom_bomb": "Small explosion",
       "city": "Increases max population",
-      "defense_post": "Increases defenses of nearby borders",
+      "defense_post": "Increases defenses of nearby borders, shells nearby enemy ships",
       "factory": "Creates railroads and spawns trains",
       "hydrogen_bomb": "Large explosion",
       "mirv": "Huge explosion, only targets selected player",

@@ -817,7 +817,7 @@ export class EngineConfig extends Config {
   }
 
   defensePostShellAttackRate(): number {
-    return 100;
+    return this.warshipShellAttackRate();
   }
 
   safeFromPiratesCooldownMax(): number {
